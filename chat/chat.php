@@ -74,6 +74,18 @@ class Chat implements MessageComponentInterface {
                     $this->rooms[$room_id]->members = new SplObjectStorage();
                     $this->rooms[$room_id]->members->attach($from);
 
+                    $this->updateReadCount($this->db_connect,$room_id,$from->Chat->user_id);
+
+                    if($this->rooms[$room_id]->members->count() == 2){
+                        foreach ($this->rooms[$room_id]->members as $member) { 
+                            if($member != $from){
+                                $res = array();
+                                $res['content_type'] = "read_all";
+                                $member->send(json_encode($res,JSON_UNESCAPED_UNICODE));
+                            }  
+                        }
+                    }
+
                 }
 
                
@@ -88,8 +100,16 @@ class Chat implements MessageComponentInterface {
                 echo $msg['sent_at'];
 
                 $to_id = $from->Chat->to_id;
-                $query_save_chat = "INSERT INTO chat(room_id,from_id,to_id,msg_type,content,sent_at) 
-                VALUES($room_id,$from_id,$to_id,'".$msg['msg_type']."','$message','".$msg['sent_at']."')";
+
+                //접속자 수에 따라 is_read 설정
+                if($this->rooms[$room_id]->members->count() == 2){
+                    $is_read = 1;
+                }else{
+                    $is_read = 0;
+                }
+
+                $query_save_chat = "INSERT INTO chat(room_id,from_id,to_id,msg_type,content,sent_at,is_read) 
+                VALUES($room_id,$from_id,$to_id,'".$msg['msg_type']."','$message','".$msg['sent_at']."',$is_read)";
 
                 $query_update_room = "UPDATE chat_room SET is_activated = 1,updated_at = '".$msg['sent_at']."' WHERE room_id = $room_id LIMIT 1";
 
@@ -101,13 +121,18 @@ class Chat implements MessageComponentInterface {
                     $query_chat_select = "SELECT * FROM chat WHERE chat_id = $chat_id LIMIT 1";
 
                     $chat = mysqli_query($this->db_connect,$query_chat_select);
-                    $chat = json_encode(mysqli_fetch_assoc($chat),JSON_UNESCAPED_UNICODE);
+                    $chat = mysqli_fetch_assoc($chat);
 
-                    echo $chat;
+                    echo json_encode($chat,JSON_UNESCAPED_UNICODE);
+
+                    $res = array();
+                    $res['content_type'] = "message";
+                    $res['content'] = $chat;
+                    $res = json_encode($res,JSON_UNESCAPED_UNICODE);
 
                     foreach ($this->rooms[$room_id]->members as $member) { 
                         if($member != $from){
-                            $member->send($chat);
+                            $member->send($res);
                         }  
                     }
                     
@@ -147,19 +172,22 @@ class Chat implements MessageComponentInterface {
 
     public function onClose(ConnectionInterface $conn) {
         //로비 구현시 변경
-        if($conn->Chat->type == TYPE_LOBBY){
-            $user_id = $conn->Chat->user_id;
-            echo "lobby 퇴장 id : $user_id";
-            unset($this->lobby[$user_id]);
-        }else{
-            $room_id = $conn->Chat->room_id;
-            $this->rooms[$room_id]->members->detach($conn);
-
-            if($this->rooms[$room_id]->members->count() == 0){
-                unset($this->rooms[$room_id]);
-                echo "room 삭제 id : $room_id";
+        if($conn != null){
+            if($conn->Chat->type == TYPE_LOBBY){
+                $user_id = $conn->Chat->user_id;
+                echo "lobby 퇴장 id : $user_id";
+                unset($this->lobby[$user_id]);
+            }else{
+                $room_id = $conn->Chat->room_id;
+                $this->rooms[$room_id]->members->detach($conn);
+    
+                if($this->rooms[$room_id]->members->count() == 0){
+                    unset($this->rooms[$room_id]);
+                    echo "room 삭제 id : $room_id";
+                }
             }
         }
+        
 
         
     }
@@ -168,6 +196,12 @@ class Chat implements MessageComponentInterface {
         echo "An error has occurred: {$e->getMessage()}\n";
 
         $conn->close();
+    }
+
+    private function updateReadCount($db_connect,$room_id,$to_id){
+        $query_update_unreads = "UPDATE chat SET is_read = 1 WHERE (room_id = $room_id && to_id = $to_id)";
+
+        mysqli_query($db_connect,$query_update_unreads);
     }
 }
 
