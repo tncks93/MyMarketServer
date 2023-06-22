@@ -11,19 +11,16 @@ define('TYPE_ENTRY','ENTRY');
 
 class Chat implements MessageComponentInterface {
     protected $db_connect;
-    protected $clients;
     protected $rooms;
     protected $lobby;
 
     public function __construct($db_connection) {
         $this->db_connect = $db_connection;
-        $this->clients = new SplObjectStorage();
         $this->rooms = array();
         $this->lobby = array();
     }
 
     public function onOpen(ConnectionInterface $conn) {
-        $this->clients->attach($conn);
         $conn->Chat = new stdClass();
 
         echo "New connection! ({$conn->resourceId})\n";
@@ -58,34 +55,36 @@ class Chat implements MessageComponentInterface {
                 }else{
                     $query_entry_room = "SELECT seller_id,buyer_id FROM chat_room WHERE room_id = $room_id LIMIT 1";
                     $room = mysqli_fetch_assoc(mysqli_query($this->db_connect,$query_entry_room));
-                    echo $room['buyer_id']." + ".$room['seller_id'];
+                    echo "buyer : ".$room['buyer_id']." + seller : ".$room['seller_id'];
                     
                     $this->rooms[$room_id] = new stdClass();
-                    $this->rooms[$room_id]->buyer = $room['buyer_id'];
-                    $this->rooms[$room_id]->seller = $room['seller_id'];
-                    if($this->rooms[$room_id]->buyer == $user_id){
-                        $from->Chat->to_id = $this->rooms[$room_id]->seller;
-                    }elseif($this->rooms[$room_id]->seller == $user_id){
-                        $from->Chat->to_id = $this->rooms[$room_id]->buyer;
-                    }else{
-                        echo "to_id error -> buyer : ".$this->rooms[$room_id]->buyer." seller : ".$this->rooms[$room_id]->seller
-                        ." user : $user_id";
-                    }
+                    $this->rooms[$room_id]->buyer = intval($room['buyer_id']);
+                    $this->rooms[$room_id]->seller = intval($room['seller_id']);
+                    
                     $this->rooms[$room_id]->members = new SplObjectStorage();
                     $this->rooms[$room_id]->members->attach($from);
 
-                    $this->updateReadCount($this->db_connect,$room_id,$from->Chat->user_id);
+                }
 
-                    if($this->rooms[$room_id]->members->count() == 2){
-                        foreach ($this->rooms[$room_id]->members as $member) { 
-                            if($member != $from){
-                                $res = array();
-                                $res['content_type'] = "read_all";
-                                $member->send(json_encode($res,JSON_UNESCAPED_UNICODE));
-                            }  
-                        }
+                if($this->rooms[$room_id]->buyer == $user_id){
+                    $from->Chat->to_id = $this->rooms[$room_id]->seller;
+                }elseif($this->rooms[$room_id]->seller == $user_id){
+                    $from->Chat->to_id = $this->rooms[$room_id]->buyer;
+                }else{
+                    echo "to_id error -> buyer : ".$this->rooms[$room_id]->buyer." seller : ".$this->rooms[$room_id]->seller
+                    ." user : $user_id";
+                }
+
+                $this->updateReadCount($this->db_connect,$room_id,$from->Chat->user_id);
+
+                if($this->rooms[$room_id]->members->count() == 2){
+                    foreach ($this->rooms[$room_id]->members as $member) { 
+                        if($member != $from){
+                            $res = array();
+                            $res['content_type'] = "read_event";
+                            $member->send(json_encode($res,JSON_UNESCAPED_UNICODE));
+                        }  
                     }
-
                 }
 
                
@@ -95,12 +94,12 @@ class Chat implements MessageComponentInterface {
                 echo "message";
                 $room_id = $from->Chat->room_id;
                 $from_id = $from->Chat->user_id;
-
-                $message = $msg['message'];
-                echo $msg['sent_at'];
-
                 $to_id = $from->Chat->to_id;
 
+                $message = $msg['content'];
+                echo $msg['sent_at'];
+
+            
                 //접속자 수에 따라 is_read 설정
                 if($this->rooms[$room_id]->members->count() == 2){
                     $is_read = 1;
@@ -118,17 +117,18 @@ class Chat implements MessageComponentInterface {
                     $chat_id = mysqli_insert_id($this->db_connect);
                     mysqli_query($this->db_connect,$query_update_room);
                     
-                    $query_chat_select = "SELECT * FROM chat WHERE chat_id = $chat_id LIMIT 1";
+                    $query_chat_select = "SELECT c.*,u.user_image AS op_image FROM chat c 
+                    JOIN user u ON u.user_id = c.from_id
+                    WHERE c.chat_id = $chat_id LIMIT 1";
 
                     $chat = mysqli_query($this->db_connect,$query_chat_select);
                     $chat = mysqli_fetch_assoc($chat);
-
-                    echo json_encode($chat,JSON_UNESCAPED_UNICODE);
 
                     $res = array();
                     $res['content_type'] = "message";
                     $res['content'] = $chat;
                     $res = json_encode($res,JSON_UNESCAPED_UNICODE);
+                    
 
                     foreach ($this->rooms[$room_id]->members as $member) { 
                         if($member != $from){
@@ -138,7 +138,7 @@ class Chat implements MessageComponentInterface {
                     
                     //로비 업데이트
                     $count = $this->rooms[$room_id]->members->count();
-                    echo "count : $count";
+                    echo "방 인원 : $count";
 
                     if($count < 2){
                         if(isset($this->lobby[$to_id])){
@@ -179,13 +179,17 @@ class Chat implements MessageComponentInterface {
                 unset($this->lobby[$user_id]);
             }else{
                 $room_id = $conn->Chat->room_id;
+                $user_id = $conn->Chat->user_id;
                 $this->rooms[$room_id]->members->detach($conn);
+                echo "roomID : $room_id 퇴장 : $user_id";
     
                 if($this->rooms[$room_id]->members->count() == 0){
                     unset($this->rooms[$room_id]);
                     echo "room 삭제 id : $room_id";
                 }
             }
+        }else{
+            echo "conn is null";
         }
         
 
