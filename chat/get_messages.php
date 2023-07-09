@@ -10,7 +10,7 @@
         $messages = array();
         $res = array();
 
-        if($_GET['book_mark'] == null){
+        if(!isset($_GET['book_mark'])){
 
             //bookmark null 일 때
             $query_select_messages = "SELECT c.*,(SELECT IF (c.to_id = $user_id,u.user_image,NULL) FROM user u WHERE u.user_id = c.from_id) AS op_image

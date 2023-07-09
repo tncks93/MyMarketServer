@@ -32,12 +32,16 @@
                 $query_select_first_messages_id = "SELECT MIN(chat_id) AS first_id FROM chat WHERE room_id = $room_id";
 
                 $first_id = mysqli_fetch_assoc(mysqli_query($db_connect,$query_select_first_messages_id))['first_id'];
-
-                if($messages[0]['chat_id'] == $first_id){
-                    $res['is_first'] = true;
+                if(count($messages)>0){
+                    if($messages[0]['chat_id'] == $first_id){
+                        $res['is_first'] = true;
+                    }else{
+                        $res['is_first'] = false;
+                    }
                 }else{
-                    $res['is_first'] = false;
+                    $res['is_first'] = true;
                 }
+                
 
                 break;
 

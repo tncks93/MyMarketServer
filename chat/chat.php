@@ -131,9 +131,10 @@ class Chat implements MessageComponentInterface {
                     
 
                     foreach ($this->rooms[$room_id]->members as $member) { 
-                        if($member != $from){
-                            $member->send($res);
-                        }  
+                        // if($member != $from){e
+                        //     $member->send($res);
+                        // }  
+                        $member->send($res);
                     }
                     
                     //로비 업데이트
