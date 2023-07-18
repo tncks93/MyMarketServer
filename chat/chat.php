@@ -1,5 +1,6 @@
 <?php
 require "../vendor/autoload.php";
+require "../fcm/FCMManager.php";
 
 use Ratchet\MessageComponentInterface;
 use Ratchet\ConnectionInterface;
@@ -117,7 +118,7 @@ class Chat implements MessageComponentInterface {
                     $chat_id = mysqli_insert_id($this->db_connect);
                     mysqli_query($this->db_connect,$query_update_room);
                     
-                    $query_chat_select = "SELECT c.*,u.user_image AS op_image FROM chat c 
+                    $query_chat_select = "SELECT c.*,u.user_image AS op_image,u.name AS op_name FROM chat c 
                     JOIN user u ON u.user_id = c.from_id
                     WHERE c.chat_id = $chat_id LIMIT 1";
 
@@ -155,6 +156,10 @@ class Chat implements MessageComponentInterface {
 
                             $this->lobby[$to_id]->send(json_encode($last_room,JSON_UNESCAPED_UNICODE));
                         }
+
+                        //fcm 전송
+                        $this->sendFCM($chat);
+                    
                     }
 
 
@@ -207,6 +212,18 @@ class Chat implements MessageComponentInterface {
         $query_update_unreads = "UPDATE chat SET is_read = 1 WHERE (room_id = $room_id && to_id = $to_id)";
 
         mysqli_query($db_connect,$query_update_unreads);
+    }
+
+    private function sendFCM($chat){
+    
+        echo json_encode($chat,JSON_UNESCAPED_UNICODE);
+        $query_select_token = "SELECT token FROM fcm_token WHERE user_id = ".$chat['to_id']." LIMIT 1";
+        $token = mysqli_fetch_assoc(mysqli_query($this->db_connect,$query_select_token))['token'];
+
+        if(!is_null($token)){
+            $FCM = new FCMManager($token,$chat);
+            $FCM->sendFCM();
+        }
     }
 }
 
