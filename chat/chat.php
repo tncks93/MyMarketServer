@@ -187,7 +187,7 @@ class Chat implements MessageComponentInterface {
                 $room_id = $conn->Chat->room_id;
                 $user_id = $conn->Chat->user_id;
                 $this->rooms[$room_id]->members->detach($conn);
-                echo "roomID : $room_id 퇴장 : $user_id";
+                echo "roomID : $room_id room 퇴장 : $user_id";
     
                 if($this->rooms[$room_id]->members->count() == 0){
                     unset($this->rooms[$room_id]);
